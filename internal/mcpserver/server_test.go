@@ -49,6 +49,7 @@ func TestToolsEndToEnd(t *testing.T) {
 	wantNames := []string{
 		"create_recipe",
 		"list_recipes",
+		"search_recipes_by_ingredient_text",
 		"search_recipes_by_ingredients",
 		"search_recipes_by_name",
 	}
@@ -85,6 +86,19 @@ func TestToolsEndToEnd(t *testing.T) {
 	decodeStructured(t, found.StructuredContent, &searchOutput)
 	if len(searchOutput.Recipes) != 1 || searchOutput.Recipes[0].Name != "Pasta" {
 		t.Fatalf("search output = %#v", searchOutput)
+	}
+
+	contained, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_recipes_by_ingredient_text",
+		Arguments: map[string]any{"query": "mato"},
+	})
+	if err != nil || contained.IsError {
+		t.Fatalf("ingredient text search result = %#v, error = %v", contained, err)
+	}
+	var containedOutput recipesOutput
+	decodeStructured(t, contained.StructuredContent, &containedOutput)
+	if len(containedOutput.Recipes) != 1 || containedOutput.Recipes[0].Name != "Pasta" {
+		t.Fatalf("ingredient text search output = %#v", containedOutput)
 	}
 
 	duplicate, err := clientSession.CallTool(ctx, &mcp.CallToolParams{

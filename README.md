@@ -24,9 +24,10 @@ All normal communication uses stdin and stdout for MCP. Startup and runtime erro
 | `create_recipe` | `name`, `ingredients` | Creates and returns a recipe. Names must be unique case-insensitively. |
 | `list_recipes` | none | Returns every recipe in case-insensitive name order. |
 | `search_recipes_by_name` | `query` | Performs a case-insensitive literal substring search. |
+| `search_recipes_by_ingredient_text` | `query` | Finds recipes with an ingredient containing the query text. |
 | `search_recipes_by_ingredients` | `ingredients` | Returns recipes containing every supplied ingredient. |
 
-Names and ingredients are trimmed when recipes are created. Ingredient searches use case-insensitive exact strings: for example, `"2 eggs"` matches `"2 Eggs"`, but not `"eggs"`. Recipe IDs are stable numeric identifiers. Empty searches return an empty `recipes` array.
+Names and ingredients are trimmed when recipes are created. `search_recipes_by_ingredient_text` uses case-insensitive literal substring matching, so `"egg"` matches both `"1 egg"` and `"2 eggs"`. The multi-ingredient search uses case-insensitive exact strings: `"2 eggs"` matches `"2 Eggs"`, but not `"eggs"`. Recipe IDs are stable numeric identifiers. Empty searches return an empty `recipes` array.
 
 ## Hermes Agent configuration
 
@@ -39,7 +40,7 @@ mcp_servers:
     args: ["--db", "/absolute/path/to/recipes.db"]
 ```
 
-Then start or reload Hermes so it discovers the four tools. This configuration is only an integration example; `recetor` itself contains no Hermes-specific code.
+Then start or reload Hermes so it discovers the five tools. This configuration is only an integration example; `recetor` itself contains no Hermes-specific code.
 
 ## Development
 

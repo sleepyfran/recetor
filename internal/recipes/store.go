@@ -168,6 +168,20 @@ func (s *Store) SearchByName(ctx context.Context, query string) ([]Recipe, error
 		 ORDER BY normalized_name, id`, []any{pattern})
 }
 
+func (s *Store) SearchByIngredientText(ctx context.Context, query string) ([]Recipe, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, fmt.Errorf("%w: ingredient query must not be blank", ErrInvalidRecipe)
+	}
+	pattern := "%" + escapeLike(normalize(query)) + "%"
+	return s.queryRecipes(ctx,
+		`SELECT DISTINCT r.id, r.name
+		 FROM recipes r
+		 JOIN ingredients i ON i.recipe_id = r.id
+		 WHERE i.normalized_value LIKE ? ESCAPE '\'
+		 ORDER BY r.normalized_name, r.id`, []any{pattern})
+}
+
 func (s *Store) SearchByIngredients(ctx context.Context, ingredients []string) ([]Recipe, error) {
 	_, normalized, err := normalizeIngredients(ingredients, true)
 	if err != nil {

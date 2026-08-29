@@ -170,6 +170,45 @@ func TestSearchByIngredientsMatchesAll(t *testing.T) {
 	}
 }
 
+func TestSearchByIngredientText(t *testing.T) {
+	ctx := context.Background()
+	store, _ := openTestStore(t)
+	for name, ingredients := range map[string][]string{
+		"Cake":       {"2 Eggs", "Egg wash", "Flour"},
+		"Omelette":   {"1 egg", "Cheese"},
+		"Toast":      {"Bread"},
+		"Cocoa":      {"100% cocoa"},
+		"Underscore": {"A_B seasoning"},
+	} {
+		if _, err := store.Create(ctx, name, ingredients); err != nil {
+			t.Fatalf("Create(%q) error = %v", name, err)
+		}
+	}
+
+	tests := []struct {
+		query string
+		want  []string
+	}{
+		{"EGG", []string{"Cake", "Omelette"}},
+		{"2 egg", []string{"Cake"}},
+		{"%", []string{"Cocoa"}},
+		{"_", []string{"Underscore"}},
+		{"missing", []string{}},
+	}
+	for _, tc := range tests {
+		got, err := store.SearchByIngredientText(ctx, tc.query)
+		if err != nil {
+			t.Fatalf("SearchByIngredientText(%q) error = %v", tc.query, err)
+		}
+		if names := recipeNames(got); !reflect.DeepEqual(names, tc.want) {
+			t.Errorf("SearchByIngredientText(%q) = %#v, want %#v", tc.query, names, tc.want)
+		}
+	}
+	if _, err := store.SearchByIngredientText(ctx, " "); !errors.Is(err, ErrInvalidRecipe) {
+		t.Fatalf("blank SearchByIngredientText() error = %v", err)
+	}
+}
+
 func recipeNames(recipes []Recipe) []string {
 	names := make([]string, 0, len(recipes))
 	for _, recipe := range recipes {

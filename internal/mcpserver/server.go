@@ -7,12 +7,13 @@ import (
 	"github.com/sleepyfran/recetor/internal/recipes"
 )
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 type recipeStore interface {
 	Create(context.Context, string, []string) (recipes.Recipe, error)
 	List(context.Context) ([]recipes.Recipe, error)
 	SearchByName(context.Context, string) ([]recipes.Recipe, error)
+	SearchByIngredientText(context.Context, string) ([]recipes.Recipe, error)
 	SearchByIngredients(context.Context, []string) ([]recipes.Recipe, error)
 }
 
@@ -39,6 +40,10 @@ type searchByIngredientsInput struct {
 	Ingredients []string `json:"ingredients" jsonschema:"Ingredients every returned recipe must contain"`
 }
 
+type searchByIngredientTextInput struct {
+	Query string `json:"query" jsonschema:"Case-insensitive substring to find in ingredient strings"`
+}
+
 func New(store recipeStore) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "recetor", Version: Version}, nil)
 
@@ -63,6 +68,14 @@ func New(store recipeStore) *mcp.Server {
 		Description: "Find recipes whose names contain a case-insensitive query string.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input searchByNameInput) (*mcp.CallToolResult, recipesOutput, error) {
 		found, err := store.SearchByName(ctx, input.Query)
+		return nil, recipesOutput{Recipes: found}, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "search_recipes_by_ingredient_text",
+		Description: "Find recipes with at least one ingredient containing a case-insensitive query string.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input searchByIngredientTextInput) (*mcp.CallToolResult, recipesOutput, error) {
+		found, err := store.SearchByIngredientText(ctx, input.Query)
 		return nil, recipesOutput{Recipes: found}, err
 	})
 
