@@ -1,0 +1,53 @@
+name: Build Linux binaries
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux ${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch:
+          - amd64
+          - arm64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist/package
+          go build -trimpath -ldflags="-s -w" -o dist/package/recetor ./cmd/recetor
+          tar -C dist/package -czf "dist/recetor-linux-${GOARCH}.tar.gz" recetor
+          sha256sum "dist/recetor-linux-${GOARCH}.tar.gz" > "dist/recetor-linux-${GOARCH}.tar.gz.sha256"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: recetor-linux-${{ matrix.goarch }}
+          path: |
+            dist/recetor-linux-${{ matrix.goarch }}.tar.gz
+            dist/recetor-linux-${{ matrix.goarch }}.tar.gz.sha256
+          if-no-files-found: error
