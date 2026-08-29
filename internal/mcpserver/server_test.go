@@ -48,7 +48,9 @@ func TestToolsEndToEnd(t *testing.T) {
 	sort.Strings(gotNames)
 	wantNames := []string{
 		"create_recipe",
+		"edit_recipe",
 		"list_recipes",
+		"remove_recipe",
 		"search_recipes_by_ingredient_text",
 		"search_recipes_by_ingredients",
 		"search_recipes_by_name",
@@ -75,6 +77,23 @@ func TestToolsEndToEnd(t *testing.T) {
 		t.Fatalf("create_recipe output = %#v", createOutput)
 	}
 
+	edited, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name: "edit_recipe",
+		Arguments: map[string]any{
+			"id":          createOutput.Recipe.ID,
+			"name":        "Tomato Pasta",
+			"ingredients": []string{"Spaghetti", "Tomatoes"},
+		},
+	})
+	if err != nil || edited.IsError {
+		t.Fatalf("edit_recipe result = %#v, error = %v", edited, err)
+	}
+	var editOutput createRecipeOutput
+	decodeStructured(t, edited.StructuredContent, &editOutput)
+	if editOutput.Recipe.ID != createOutput.Recipe.ID || editOutput.Recipe.Name != "Tomato Pasta" {
+		t.Fatalf("edit_recipe output = %#v", editOutput)
+	}
+
 	found, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "search_recipes_by_ingredients",
 		Arguments: map[string]any{"ingredients": []string{"tomatoes"}},
@@ -84,7 +103,7 @@ func TestToolsEndToEnd(t *testing.T) {
 	}
 	var searchOutput recipesOutput
 	decodeStructured(t, found.StructuredContent, &searchOutput)
-	if len(searchOutput.Recipes) != 1 || searchOutput.Recipes[0].Name != "Pasta" {
+	if len(searchOutput.Recipes) != 1 || searchOutput.Recipes[0].Name != "Tomato Pasta" {
 		t.Fatalf("search output = %#v", searchOutput)
 	}
 
@@ -97,14 +116,14 @@ func TestToolsEndToEnd(t *testing.T) {
 	}
 	var containedOutput recipesOutput
 	decodeStructured(t, contained.StructuredContent, &containedOutput)
-	if len(containedOutput.Recipes) != 1 || containedOutput.Recipes[0].Name != "Pasta" {
+	if len(containedOutput.Recipes) != 1 || containedOutput.Recipes[0].Name != "Tomato Pasta" {
 		t.Fatalf("ingredient text search output = %#v", containedOutput)
 	}
 
 	duplicate, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "create_recipe",
 		Arguments: map[string]any{
-			"name":        "pasta",
+			"name":        "tomato pasta",
 			"ingredients": []string{"Noodles"},
 		},
 	})
@@ -113,6 +132,27 @@ func TestToolsEndToEnd(t *testing.T) {
 	}
 	if !duplicate.IsError || len(duplicate.Content) == 0 {
 		t.Fatalf("duplicate create result = %#v, want visible tool error", duplicate)
+	}
+
+	removed, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "remove_recipe",
+		Arguments: map[string]any{"id": createOutput.Recipe.ID},
+	})
+	if err != nil || removed.IsError {
+		t.Fatalf("remove_recipe result = %#v, error = %v", removed, err)
+	}
+	var removeOutput createRecipeOutput
+	decodeStructured(t, removed.StructuredContent, &removeOutput)
+	if removeOutput.Recipe.Name != "Tomato Pasta" {
+		t.Fatalf("remove_recipe output = %#v", removeOutput)
+	}
+
+	missing, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "remove_recipe",
+		Arguments: map[string]any{"id": createOutput.Recipe.ID},
+	})
+	if err != nil || !missing.IsError {
+		t.Fatalf("second remove_recipe result = %#v, error = %v, want tool error", missing, err)
 	}
 }
 

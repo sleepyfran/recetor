@@ -7,10 +7,12 @@ import (
 	"github.com/sleepyfran/recetor/internal/recipes"
 )
 
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 type recipeStore interface {
 	Create(context.Context, string, []string) (recipes.Recipe, error)
+	Edit(context.Context, int64, string, []string) (recipes.Recipe, error)
+	Remove(context.Context, int64) (recipes.Recipe, error)
 	List(context.Context) ([]recipes.Recipe, error)
 	SearchByName(context.Context, string) ([]recipes.Recipe, error)
 	SearchByIngredientText(context.Context, string) ([]recipes.Recipe, error)
@@ -24,6 +26,16 @@ type createRecipeInput struct {
 
 type createRecipeOutput struct {
 	Recipe recipes.Recipe `json:"recipe"`
+}
+
+type editRecipeInput struct {
+	ID          int64    `json:"id" jsonschema:"Stable numeric identifier of the recipe to edit"`
+	Name        string   `json:"name" jsonschema:"Replacement name of the recipe"`
+	Ingredients []string `json:"ingredients" jsonschema:"Replacement ordered list of ingredient strings"`
+}
+
+type removeRecipeInput struct {
+	ID int64 `json:"id" jsonschema:"Stable numeric identifier of the recipe to remove"`
 }
 
 type listRecipesInput struct{}
@@ -52,6 +64,22 @@ func New(store recipeStore) *mcp.Server {
 		Description: "Create a recipe from a unique name and an ordered list of ingredient strings.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input createRecipeInput) (*mcp.CallToolResult, createRecipeOutput, error) {
 		recipe, err := store.Create(ctx, input.Name, input.Ingredients)
+		return nil, createRecipeOutput{Recipe: recipe}, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "edit_recipe",
+		Description: "Replace a recipe's name and ordered ingredients while preserving its stable ID.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input editRecipeInput) (*mcp.CallToolResult, createRecipeOutput, error) {
+		recipe, err := store.Edit(ctx, input.ID, input.Name, input.Ingredients)
+		return nil, createRecipeOutput{Recipe: recipe}, err
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "remove_recipe",
+		Description: "Permanently remove a recipe by its stable numeric ID and return the removed recipe.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input removeRecipeInput) (*mcp.CallToolResult, createRecipeOutput, error) {
+		recipe, err := store.Remove(ctx, input.ID)
 		return nil, createRecipeOutput{Recipe: recipe}, err
 	})
 

@@ -98,6 +98,82 @@ func TestCreateValidationAndUniqueness(t *testing.T) {
 	}
 }
 
+func TestEditRecipe(t *testing.T) {
+	ctx := context.Background()
+	store, _ := openTestStore(t)
+
+	created, err := store.Create(ctx, "Soup", []string{"Water", "Salt"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := store.Create(ctx, "Toast", []string{"Bread"}); err != nil {
+		t.Fatalf("Create() second recipe error = %v", err)
+	}
+
+	edited, err := store.Edit(ctx, created.ID, "  Vegetable Soup ", []string{" Stock ", "Carrots"})
+	if err != nil {
+		t.Fatalf("Edit() error = %v", err)
+	}
+	if edited.ID != created.ID || edited.Name != "Vegetable Soup" ||
+		!reflect.DeepEqual(edited.Ingredients, []string{"Stock", "Carrots"}) {
+		t.Fatalf("Edit() = %#v", edited)
+	}
+
+	got, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if names := recipeNames(got); !reflect.DeepEqual(names, []string{"Toast", "Vegetable Soup"}) {
+		t.Fatalf("List() names = %#v", names)
+	}
+	if !reflect.DeepEqual(got[1].Ingredients, []string{"Stock", "Carrots"}) {
+		t.Fatalf("stored ingredients = %#v", got[1].Ingredients)
+	}
+
+	if _, err := store.Edit(ctx, created.ID, " toast ", []string{"Stock"}); !errors.Is(err, ErrRecipeExists) {
+		t.Fatalf("duplicate Edit() error = %v, want ErrRecipeExists", err)
+	}
+	if _, err := store.Edit(ctx, 999, "Missing", []string{"Stock"}); !errors.Is(err, ErrRecipeNotFound) {
+		t.Fatalf("missing Edit() error = %v, want ErrRecipeNotFound", err)
+	}
+	if _, err := store.Edit(ctx, 0, "Invalid", []string{"Stock"}); !errors.Is(err, ErrInvalidRecipe) {
+		t.Fatalf("invalid ID Edit() error = %v, want ErrInvalidRecipe", err)
+	}
+
+	got, err = store.List(ctx)
+	if err != nil || got[1].Name != "Vegetable Soup" || !reflect.DeepEqual(got[1].Ingredients, []string{"Stock", "Carrots"}) {
+		t.Fatalf("List() after rejected edits = %#v, %v", got, err)
+	}
+}
+
+func TestRemoveRecipe(t *testing.T) {
+	ctx := context.Background()
+	store, _ := openTestStore(t)
+
+	created, err := store.Create(ctx, "Soup", []string{"Water", "Salt"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	removed, err := store.Remove(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if !reflect.DeepEqual(removed, created) {
+		t.Fatalf("Remove() = %#v, want %#v", removed, created)
+	}
+
+	got, err := store.List(ctx)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("List() after Remove() = %#v, %v", got, err)
+	}
+	if _, err := store.Remove(ctx, created.ID); !errors.Is(err, ErrRecipeNotFound) {
+		t.Fatalf("second Remove() error = %v, want ErrRecipeNotFound", err)
+	}
+	if _, err := store.Remove(ctx, -1); !errors.Is(err, ErrInvalidRecipe) {
+		t.Fatalf("invalid ID Remove() error = %v, want ErrInvalidRecipe", err)
+	}
+}
+
 func TestSearchByName(t *testing.T) {
 	ctx := context.Background()
 	store, _ := openTestStore(t)

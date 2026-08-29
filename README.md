@@ -22,6 +22,8 @@ All normal communication uses stdin and stdout for MCP. Startup and runtime erro
 | Tool | Input | Behavior |
 | --- | --- | --- |
 | `create_recipe` | `name`, `ingredients` | Creates and returns a recipe. Names must be unique case-insensitively. |
+| `edit_recipe` | `id`, `name`, `ingredients` | Replaces a recipe's name and ingredients while preserving its ID. |
+| `remove_recipe` | `id` | Permanently removes and returns a recipe. |
 | `list_recipes` | none | Returns every recipe in case-insensitive name order. |
 | `search_recipes_by_name` | `query` | Performs a case-insensitive literal substring search. |
 | `search_recipes_by_ingredient_text` | `query` | Finds recipes with an ingredient containing the query text. |
@@ -40,7 +42,7 @@ mcp_servers:
     args: ["--db", "/absolute/path/to/recipes.db"]
 ```
 
-Then start or reload Hermes so it discovers the five tools. This configuration is only an integration example; `recetor` itself contains no Hermes-specific code.
+Then start or reload Hermes so it discovers the seven tools. This configuration is only an integration example; `recetor` itself contains no Hermes-specific code.
 
 ## Development
 

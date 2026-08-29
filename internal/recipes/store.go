@@ -13,8 +13,9 @@ import (
 const schemaVersion = 1
 
 var (
-	ErrInvalidRecipe = errors.New("invalid recipe")
-	ErrRecipeExists  = errors.New("recipe name already exists")
+	ErrInvalidRecipe  = errors.New("invalid recipe")
+	ErrRecipeExists   = errors.New("recipe name already exists")
+	ErrRecipeNotFound = errors.New("recipe not found")
 )
 
 type Recipe struct {
@@ -149,6 +150,113 @@ func (s *Store) Create(ctx context.Context, name string, ingredients []string) (
 	}
 
 	return Recipe{ID: id, Name: name, Ingredients: cleanIngredients}, nil
+}
+
+// Edit replaces a recipe's name and ordered ingredients while preserving its ID.
+func (s *Store) Edit(ctx context.Context, id int64, name string, ingredients []string) (Recipe, error) {
+	if id <= 0 {
+		return Recipe{}, fmt.Errorf("%w: recipe ID must be positive", ErrInvalidRecipe)
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Recipe{}, fmt.Errorf("%w: name must not be blank", ErrInvalidRecipe)
+	}
+	cleanIngredients, normalizedIngredients, err := normalizeIngredients(ingredients, false)
+	if err != nil {
+		return Recipe{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Recipe{}, fmt.Errorf("begin edit recipe: %w", err)
+	}
+	defer tx.Rollback()
+
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM recipes WHERE id = ?`, id).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
+		return Recipe{}, fmt.Errorf("%w: ID %d", ErrRecipeNotFound, id)
+	} else if err != nil {
+		return Recipe{}, fmt.Errorf("find recipe to edit: %w", err)
+	}
+
+	var conflictingID int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM recipes WHERE normalized_name = ? AND id <> ?`, normalize(name), id).Scan(&conflictingID)
+	if err == nil {
+		return Recipe{}, fmt.Errorf("%w: %q", ErrRecipeExists, name)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Recipe{}, fmt.Errorf("check recipe name: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE recipes SET name = ?, normalized_name = ? WHERE id = ?`, name, normalize(name), id); err != nil {
+		return Recipe{}, fmt.Errorf("update recipe: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ingredients WHERE recipe_id = ?`, id); err != nil {
+		return Recipe{}, fmt.Errorf("replace ingredients: %w", err)
+	}
+	for i := range cleanIngredients {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO ingredients(recipe_id, position, value, normalized_value)
+			 VALUES (?, ?, ?, ?)`, id, i, cleanIngredients[i], normalizedIngredients[i]); err != nil {
+			return Recipe{}, fmt.Errorf("insert edited ingredient: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Recipe{}, fmt.Errorf("commit edited recipe: %w", err)
+	}
+
+	return Recipe{ID: id, Name: name, Ingredients: cleanIngredients}, nil
+}
+
+// Remove deletes a recipe and returns its last stored representation.
+func (s *Store) Remove(ctx context.Context, id int64) (Recipe, error) {
+	if id <= 0 {
+		return Recipe{}, fmt.Errorf("%w: recipe ID must be positive", ErrInvalidRecipe)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Recipe{}, fmt.Errorf("begin remove recipe: %w", err)
+	}
+	defer tx.Rollback()
+
+	recipe := Recipe{ID: id}
+	if err := tx.QueryRowContext(ctx, `SELECT name FROM recipes WHERE id = ?`, id).Scan(&recipe.Name); errors.Is(err, sql.ErrNoRows) {
+		return Recipe{}, fmt.Errorf("%w: ID %d", ErrRecipeNotFound, id)
+	} else if err != nil {
+		return Recipe{}, fmt.Errorf("find recipe to remove: %w", err)
+	}
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT value FROM ingredients WHERE recipe_id = ? ORDER BY position`, id)
+	if err != nil {
+		return Recipe{}, fmt.Errorf("query removed recipe ingredients: %w", err)
+	}
+	recipe.Ingredients = make([]string, 0)
+	for rows.Next() {
+		var ingredient string
+		if err := rows.Scan(&ingredient); err != nil {
+			rows.Close()
+			return Recipe{}, fmt.Errorf("scan removed recipe ingredient: %w", err)
+		}
+		recipe.Ingredients = append(recipe.Ingredients, ingredient)
+	}
+	if err := rows.Close(); err != nil {
+		return Recipe{}, fmt.Errorf("close removed recipe ingredients: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return Recipe{}, fmt.Errorf("iterate removed recipe ingredients: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM recipes WHERE id = ?`, id); err != nil {
+		return Recipe{}, fmt.Errorf("remove recipe: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Recipe{}, fmt.Errorf("commit removed recipe: %w", err)
+	}
+	return recipe, nil
 }
 
 func (s *Store) List(ctx context.Context) ([]Recipe, error) {
